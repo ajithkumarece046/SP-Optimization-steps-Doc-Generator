@@ -280,44 +280,44 @@ def analyze_stored_procedure(file_content):
 st.title("SQL Stored Procedure Analyzer")
 st.write("Upload a SQL stored procedure file for AI-powered optimization analysis")
 
-# Sidebar for configuration information
-with st.sidebar:
-    st.header("Configuration")
-    st.info("This app uses Azure OpenAI configured through environment variables.")
+# # Sidebar for configuration information
+# with st.sidebar:
+#     st.header("Configuration")
+#     st.info("This app uses Azure OpenAI configured through environment variables.")
     
-    # Add a configuration check section
-    config_expander = st.expander("Check Configuration", expanded=False)
-    with config_expander:
-        # Load environment variables to check if they're set
-        load_dotenv()
+#     # Add a configuration check section
+#     config_expander = st.expander("Check Configuration", expanded=False)
+#     with config_expander:
+#         # Load environment variables to check if they're set
+#         load_dotenv()
         
-        azure_openai_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")  
-        azure_openai_key = os.getenv("AZURE_OPENAI_KEY")
-        azure_api_version = os.getenv("API_VERSION")
+#         azure_openai_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")  
+#         azure_openai_key = os.getenv("AZURE_OPENAI_KEY")
+#         azure_api_version = os.getenv("API_VERSION")
         
-        # Display status of environment variables
-        st.write("Environment Variables Status:")
-        st.write(f"AZURE_OPENAI_ENDPOINT: {'✅ Set' if azure_openai_endpoint else '❌ Missing'}")
-        st.write(f"AZURE_OPENAI_KEY: {'✅ Set' if azure_openai_key else '❌ Missing'}")
-        st.write(f"API_VERSION: {'✅ Set' if azure_api_version else '❌ Missing'}")
+#         # Display status of environment variables
+#         st.write("Environment Variables Status:")
+#         st.write(f"AZURE_OPENAI_ENDPOINT: {'✅ Set' if azure_openai_endpoint else '❌ Missing'}")
+#         st.write(f"AZURE_OPENAI_KEY: {'✅ Set' if azure_openai_key else '❌ Missing'}")
+#         st.write(f"API_VERSION: {'✅ Set' if azure_api_version else '❌ Missing'}")
         
-        if not all([azure_openai_endpoint, azure_openai_key, azure_api_version]):
-            st.warning("Some required environment variables are missing. Please set them in your .env file.")
+#         if not all([azure_openai_endpoint, azure_openai_key, azure_api_version]):
+#             st.warning("Some required environment variables are missing. Please set them in your .env file.")
             
-            # Option to set variables manually for testing
-            st.subheader("Temporary Setup (Session Only)")
-            temp_endpoint = st.text_input("Azure OpenAI Endpoint", value=azure_openai_endpoint or "")
-            temp_key = st.text_input("Azure OpenAI Key", value="", type="password")
-            temp_api_version = st.text_input("API Version", value=azure_api_version or "2023-05-15")
+#             # Option to set variables manually for testing
+#             st.subheader("Temporary Setup (Session Only)")
+#             temp_endpoint = st.text_input("Azure OpenAI Endpoint", value=azure_openai_endpoint or "")
+#             temp_key = st.text_input("Azure OpenAI Key", value="", type="password")
+#             temp_api_version = st.text_input("API Version", value=azure_api_version or "2023-05-15")
             
-            if st.button("Apply Temporary Settings"):
-                os.environ["AZURE_OPENAI_ENDPOINT"] = temp_endpoint
-                os.environ["AZURE_OPENAI_KEY"] = temp_key
-                os.environ["API_VERSION"] = temp_api_version
-                st.success("Temporary settings applied for this session!")
+#             if st.button("Apply Temporary Settings"):
+#                 os.environ["AZURE_OPENAI_ENDPOINT"] = temp_endpoint
+#                 os.environ["AZURE_OPENAI_KEY"] = temp_key
+#                 os.environ["API_VERSION"] = temp_api_version
+#                 st.success("Temporary settings applied for this session!")
     
-    st.markdown("---")
-    st.markdown("""
+st.markdown("---")
+st.markdown("""
     ### About This Tool
     This app analyzes SQL stored procedures using AI to identify optimization opportunities.
     
