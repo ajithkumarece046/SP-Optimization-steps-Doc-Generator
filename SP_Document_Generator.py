@@ -177,24 +177,23 @@ def create_word_document(analysis):
 # Function to analyze stored procedure using Azure OpenAI
 def analyze_stored_procedure(file_content):
     try:
-        # Load environment variables
-        load_dotenv()
-        
-        azure_openai_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")  
-        azure_openai_key = os.getenv("AZURE_OPENAI_API_KEY")            
-        azure_api_version = os.getenv("API_VERSION")  
-        
-        # Validate environment variables
+        # Load credentials securely from Streamlit secrets
+        azure_openai_endpoint = st.secrets["AZURE_OPENAI_ENDPOINT"]
+        azure_openai_key = st.secrets["AZURE_OPENAI_API_KEY"]
+        azure_api_version = st.secrets["API_VERSION"]
+
+        # Validate credentials
         if not all([azure_openai_endpoint, azure_openai_key, azure_api_version]):
-            st.error("Missing required environment variables. Please check your .env file.")
+            st.error("Missing required secrets. Please check your .streamlit/secrets.toml file.")
             return None
-        
+
+        # Initialize Azure OpenAI client
         client = AzureOpenAI(
-            api_key=azure_openai_key,  
+            api_key=azure_openai_key,
             api_version=azure_api_version,
             azure_endpoint=azure_openai_endpoint
         )
-        
+
         deployment_name = "gpt-4o-mini"
         
         prompt = f"""
