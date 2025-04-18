@@ -49,7 +49,6 @@ def create_word_document(analysis):
         # Existing Logic
         doc.add_heading('Existing Logic:', level=3)
         existing_code = doc.add_paragraph(opt["existing_logic"])
-        # existing_code.style = 'Code'  # <--- REMOVE THIS LINE
 
         # Format code paragraph
         existing_code_fmt = existing_code.paragraph_format
@@ -64,7 +63,6 @@ def create_word_document(analysis):
         # Optimized Logic
         doc.add_heading('Optimized Logic:', level=3)
         optimized_code = doc.add_paragraph(opt["optimized_logic"])
-        # optimized_code.style = 'Code' # <--- REMOVE THIS LINE
 
         # Format code paragraph
         optimized_code_fmt = optimized_code.paragraph_format
@@ -81,21 +79,9 @@ def create_word_document(analysis):
         explanation_text = explanation_para.add_run(opt["explanation"])
         explanation_text.italic = True
 
-        # Add separator paragraph (using a paragraph border might be better visually)
-        # Consider adding a paragraph border instead of underscores for a cleaner look
+        # Add separator paragraph
         separator = doc.add_paragraph()
-        # Example of adding a bottom border (uncomment if desired)
-        # p_border = OxmlElement('w:pBdr')
-        # bottom_border = OxmlElement('w:bottom')
-        # bottom_border.set(qn('w:val'), 'single')
-        # bottom_border.set(qn('w:sz'), '6') # size in 1/8ths of a point
-        # bottom_border.set(qn('w:space'), '1')
-        # bottom_border.set(qn('w:color'), 'auto')
-        # p_border.append(bottom_border)
-        # separator._p.get_or_add_pPr().append(p_border)
-        # Or keep the simple underscore line:
         separator.add_run('_' * 40)
-
 
     # Add summary table
     doc.add_heading('Summary:', level=1)
@@ -105,65 +91,83 @@ def create_word_document(analysis):
     for opt in analysis["optimizations"]:
         table_data.append({
             "Type of Change": opt.get("type", "N/A"),
-            "Line Number": opt.get("line_number", "N/A"), # Use .get for safety
-            "Original Code Snippet": opt.get("existing_logic", ""),  # Remove truncation
-            "Optimized Code Snippet": opt.get("optimized_logic", ""),  # Remove truncation
+            "Line Number": opt.get("line_number", "N/A"), 
+            "Original Code Snippet": opt.get("existing_logic", ""),  # No truncation
+            "Optimized Code Snippet": opt.get("optimized_logic", ""),  # No truncation 
             "Optimization Explanation": opt.get("explanation", "")
         })
 
     # Add table to document only if there's data
     if table_data:
-        num_rows = 1 + len(table_data)
-        num_cols = 5
-        table = doc.add_table(rows=num_rows, cols=num_cols)
-        table.style = 'Table Grid' # Ensure 'Table Grid' style exists or use a known default
-
-        # Set header row
+        # Create a table with appropriate dimensions
+        # Note: We're using a 3-column table instead of 5 to fit better on the page
+        # The code snippets will be placed under the headers
+        num_rows = len(table_data) * 2  # Each entry takes 2 rows (header + content)
+        table = doc.add_table(rows=num_rows, cols=3)
+        table.style = 'Table Grid'
+        
+        # Set main headers for the first row
         header_cells = table.rows[0].cells
-        headers = ['Type of Change', 'Line Number', 'Original Code Snippet', 'Optimized Code Snippet', 'Optimization Explanation']
-        for i, header_text in enumerate(headers):
-            cell = header_cells[i]
-            # Clear existing content (sometimes needed)
-            cell.text = ''
-            # Add text and format
-            p = cell.paragraphs[0]
-            run = p.add_run(header_text)
-            run.bold = True
-            p.alignment = WD_ALIGN_PARAGRAPH.CENTER # Center align header text
-
-        # Add data rows
-        for i, item in enumerate(table_data):
-            row_cells = table.rows[i+1].cells
+        header_cells[0].text = "Type of Change"
+        header_cells[1].text = "Line Number"
+        header_cells[2].text = "Optimization Explanation"
+        
+        # Format the header row
+        for cell in header_cells:
+            for paragraph in cell.paragraphs:
+                for run in paragraph.runs:
+                    run.bold = True
+                paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        
+        # Fill in the table data - using multiple rows for better readability
+        current_row = 1
+        for item in table_data:
+            # Set the basic info in the first row
+            row_cells = table.rows[current_row].cells
             row_cells[0].text = item['Type of Change']
             row_cells[1].text = item['Line Number']
-            row_cells[2].text = item['Original Code Snippet']
-            row_cells[3].text = item['Optimized Code Snippet']
-            row_cells[4].text = item['Optimization Explanation']
-
-        # Set table column widths (apply carefully)
-        try:
-            table.columns[0].width = Inches(1.2)
-            table.columns[1].width = Inches(0.8) # Reduced width for line number
-            table.columns[2].width = Inches(1.5)
-            table.columns[3].width = Inches(1.5)
-            table.columns[4].width = Inches(2.0) # Increased width for explanation
-        except IndexError:
-             st.warning("Could not set all table column widths.")
-
-
+            row_cells[2].text = item['Optimization Explanation']
+            
+            # Move to next row and add the code sections
+            current_row += 1
+            if current_row < num_rows:  # Safety check
+                # Get the next row and merge all cells
+                code_row = table.rows[current_row]
+                code_cell = code_row.cells[0]
+                code_cell.merge(code_row.cells[1])
+                code_cell.merge(code_row.cells[0])  # Merge with the already merged cell
+                
+                # Add original and optimized code
+                p1 = code_cell.add_paragraph("Original Code:")
+                p1.runs[0].bold = True
+                p2 = code_cell.add_paragraph(item['Original Code Snippet'])
+                # Format as code
+                for run in p2.runs:
+                    run.font.name = 'Courier New'
+                    run.font.size = Pt(9)
+                
+                p3 = code_cell.add_paragraph("Optimized Code:")
+                p3.runs[0].bold = True
+                p4 = code_cell.add_paragraph(item['Optimized Code Snippet'])
+                # Format as code
+                for run in p4.runs:
+                    run.font.name = 'Courier New'
+                    run.font.size = Pt(9)
+                
+                current_row += 1
+        
         # Apply alternate row shading
-        for i, row in enumerate(table.rows):
-            if i > 0 and i % 2 == 0:  # Even data rows (index 2, 4, ...) get shading
-                for cell in row.cells:
+        for i in range(0, num_rows, 2):  # Apply to every other data row
+            if i > 0:  # Skip header row
+                for cell in table.rows[i].cells:
                     tcPr = cell._tc.get_or_add_tcPr()
                     shading_elm = OxmlElement('w:shd')
-                    shading_elm.set(qn('w:fill'), "F2F2F2") # Light gray color
-                    shading_elm.set(qn('w:val'), 'clear') # Ensure fill type is set
+                    shading_elm.set(qn('w:fill'), "F2F2F2")  # Light gray
+                    shading_elm.set(qn('w:val'), 'clear')
                     shading_elm.set(qn('w:color'), 'auto')
                     tcPr.append(shading_elm)
     else:
         doc.add_paragraph("No optimization suggestions were generated.")
-
 
     # Save the document to a BytesIO object
     doc_io = BytesIO()
@@ -171,8 +175,6 @@ def create_word_document(analysis):
     doc_io.seek(0)
 
     return doc_io
-
-# --- Keep the rest of your Streamlit code as is ---
 
 # Function to analyze stored procedure using Azure OpenAI
 def analyze_stored_procedure(file_content):
@@ -256,7 +258,6 @@ def analyze_stored_procedure(file_content):
         
         # Extract the JSON from the response
         analysis_result = response.choices[0].message.content
-        st.write(analysis_result)
         
         # Debug: Display raw response for troubleshooting
         st.sidebar.expander("Debug Raw Response", expanded=False).code(analysis_result)
