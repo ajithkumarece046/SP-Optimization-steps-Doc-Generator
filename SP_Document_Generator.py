@@ -463,8 +463,8 @@ if sql_content:
                     summary_data.append({
                         "Type of Change": opt["type"],
                         "Line Number": opt["line_number"],
-                        "Original Code Snippet": opt["existing_logic"][:40] + "..." if len(opt["existing_logic"]) > 40 else opt["existing_logic"],
-                        "Optimized Code Snippet": opt["optimized_logic"][:40] + "..." if len(opt["optimized_logic"]) > 40 else opt["optimized_logic"],
+                        "Original Code Snippet": opt["existing_logic"],
+                        "Optimized Code Snippet": opt["optimized_logic"],
                         "Optimization Explanation": opt["explanation"]
                     })
                 
