@@ -9,7 +9,7 @@ from openai import AzureOpenAI
 import docx
 from docx import Document
 from docx.shared import Pt, Inches, RGBColor
-from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_STYLE_TYPE # Added WD_STYLE_TYPE
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 import traceback # Added for better error reporting
@@ -30,13 +30,13 @@ def create_word_document(analysis):
 
         # --- Document Styles (Optional but recommended) ---
         # Define styles if needed, e.g., for code blocks
-        # styles = doc.styles
+        styles = doc.styles
         # try:
         #     code_style = styles['Code'] # Check if 'Code' style exists
         # except KeyError:
         #     # Create a base style for code if 'Code' doesn't exist
         #     from docx.shared import RGBColor
-        #     style = styles.add_style('Code', WD_STYLE_TYPE.PARAGRAPH)
+        #     style = styles.add_style('CodeStyle', WD_STYLE_TYPE.PARAGRAPH) # Use unique name
         #     style.font.name = 'Courier New'
         #     style.font.size = Pt(10)
         #     # Optional: Add light background shading
@@ -78,12 +78,7 @@ def create_word_document(analysis):
                     run.font.name = 'Courier New'
                     run.font.size = Pt(10)
                     existing_code_para.paragraph_format.left_indent = Inches(0.25)
-                    # Optional: Add shading to code block paragraphs
-                    # ppr = existing_code_para._p.get_or_add_pPr()
-                    # shd = OxmlElement('w:shd')
-                    # shd.set(qn('w:fill'), 'F2F2F2') # Light gray
-                    # shd.set(qn('w:val'), 'clear')
-                    # ppr.append(shd)
+                    # existing_code_para.style = 'CodeStyle' # Apply style if defined
                 else:
                     doc.add_paragraph("N/A")
 
@@ -97,12 +92,7 @@ def create_word_document(analysis):
                     run.font.name = 'Courier New'
                     run.font.size = Pt(10)
                     optimized_code_para.paragraph_format.left_indent = Inches(0.25)
-                    # Optional: Add shading
-                    # ppr = optimized_code_para._p.get_or_add_pPr()
-                    # shd = OxmlElement('w:shd')
-                    # shd.set(qn('w:fill'), 'F2F2F2') # Light gray
-                    # shd.set(qn('w:val'), 'clear')
-                    # ppr.append(shd)
+                    # optimized_code_para.style = 'CodeStyle' # Apply style if defined
                 else:
                     doc.add_paragraph("N/A")
 
@@ -126,8 +116,8 @@ def create_word_document(analysis):
                 table_data.append({
                     "Type of Change": opt.get("type", "N/A"),
                     "Line Number": str(opt.get("line_number", "N/A")), # Ensure string type for line number
-                    "Original Code Snippet": opt.get("existing_logic", ""), # <-- MODIFIED: Display full snippet
-                    "Optimized Code Snippet": opt.get("optimized_logic", ""), # <-- MODIFIED: Display full snippet
+                    "Original Code Snippet": opt.get("existing_logic", ""), # <-- Display full snippet
+                    "Optimized Code Snippet": opt.get("optimized_logic", ""), # <-- Display full snippet
                     "Optimization Explanation": opt.get("explanation", "")
                 })
 
@@ -137,6 +127,8 @@ def create_word_document(analysis):
             num_cols = 5
             table = doc.add_table(rows=num_rows, cols=num_cols)
             table.style = 'Table Grid' # Use a built-in style
+            table.autofit = False # Disable autofit to respect column widths better
+            table.allow_autofit = False # Ensure autofit is off
 
             # --- Table Header ---
             header_cells = table.rows[0].cells
@@ -171,6 +163,8 @@ def create_word_document(analysis):
                 for cell_idx in [2, 3]:
                     cell = row_cells[cell_idx]
                     for paragraph in cell.paragraphs:
+                        # Ensure cell vertical alignment is top for code readability
+                        cell.vertical_alignment = docx.enum.table.WD_ALIGN_VERTICAL.TOP
                         for run in paragraph.runs:
                             run.font.name = 'Courier New'
                             run.font.size = Pt(9) # Slightly smaller font for table code
@@ -186,14 +180,20 @@ def create_word_document(analysis):
                         tcPr.append(shading_elm)
 
             # --- Set Table Column Widths (Adjusted) ---
-            # Total width should ideally be around 6.5 inches for standard margins
+            # These widths are suggestions; Word's layout engine might adjust them.
             try:
+                # Ensure table layout allows fixed widths
+                tbl_pr = table._tbl.tblPr
+                tbl_layout = OxmlElement('w:tblLayout')
+                tbl_layout.set(qn('w:type'), 'fixed')
+                tbl_pr.append(tbl_layout)
+
                 table.columns[0].width = Inches(1.0) # Type of Change
                 table.columns[1].width = Inches(0.5) # Line Number
-                table.columns[2].width = Inches(2.0) # Original Code Snippet (Increased)
-                table.columns[3].width = Inches(2.0) # Optimized Code Snippet (Increased)
-                table.columns[4].width = Inches(1.5) # Explanation (Adjusted)
-                # Total Width = 1.0 + 0.5 + 2.0 + 2.0 + 1.5 = 7.0 inches (might be slightly wide, Word will adjust/wrap)
+                table.columns[2].width = Inches(2.2) # Original Code Snippet (Increased)
+                table.columns[3].width = Inches(2.2) # Optimized Code Snippet (Increased)
+                table.columns[4].width = Inches(1.6) # Explanation (Adjusted)
+                # Total Width ~ 7.5 inches (might exceed standard page width with margins, word will wrap)
             except IndexError:
                  st.warning("Could not set all table column widths. Check number of columns.")
             except Exception as e:
@@ -220,6 +220,10 @@ def create_word_document(analysis):
 
 # --- Function to analyze stored procedure using Azure OpenAI ---
 def analyze_stored_procedure(file_content):
+    """Analyzes SQL content using Azure OpenAI and returns parsed JSON."""
+    if not file_content or not file_content.strip():
+         st.warning("Cannot analyze empty SQL content.")
+         return None
     try:
         # Load credentials securely from Streamlit secrets
         azure_openai_endpoint = st.secrets["AZURE_OPENAI_ENDPOINT"]
@@ -239,8 +243,6 @@ def analyze_stored_procedure(file_content):
             azure_endpoint=azure_openai_endpoint
         )
 
-        # deployment_name = "gpt-4o-mini" # Defined above with secrets.get
-
         prompt = f"""
         Analyze the following SQL stored procedure and return your analysis ONLY in JSON format:
 
@@ -249,8 +251,8 @@ def analyze_stored_procedure(file_content):
         ```
 
         **Instructions:**
-        1.  Identify the stored procedure name.
-        2.  Describe the scope/purpose of the stored procedure in 4-5 concise lines.
+        1.  Identify the stored procedure name (value for "procedure_name").
+        2.  Describe the scope/purpose of the stored procedure in 4-5 concise lines (value for "scope").
         3.  Identify up to 5 high-priority optimization opportunities. Focus on significant performance impacts like:
             *   Replacing cursors with set-based operations (e.g., CTEs, derived tables).
             *   Consolidating multiple UPDATE/DELETE statements targeting the same rows.
@@ -258,19 +260,20 @@ def analyze_stored_procedure(file_content):
             *   Identifying and rewriting inefficient query patterns (e.g., correlated subqueries, functions in WHERE clauses).
             *   Detecting unused variables or temporary tables.
             *   Simplifying complex logic where possible.
-        4.  For each optimization opportunity, provide:
+            *   Parameter sniffing issues if identifiable.
+        4.  For each optimization opportunity, create a JSON object within the "optimizations" array containing:
             *   `type`: A short description (e.g., "Replace Cursor", "Combine Updates", "Add Index").
-            *   `line_number`: The approximate starting line number or range (e.g., "55" or "55-60") where the existing logic is found. If not applicable, use "N/A".
-            *   `existing_logic`: The *complete*, relevant block of the original SQL code that needs modification. Include enough context.
-            *   `optimized_logic`: The *complete*, suggested replacement SQL code, including any necessary surrounding syntax (like declarations if needed).
+            *   `line_number`: The approximate starting line number or range (e.g., "55" or "55-60") where the existing logic is found. Use "N/A" if not applicable.
+            *   `existing_logic`: The *complete*, relevant block of the original SQL code that needs modification. Include enough context. Ensure this is a single string, escaping newlines if necessary within the JSON string.
+            *   `optimized_logic`: The *complete*, suggested replacement SQL code, including any necessary surrounding syntax. Ensure this is a single string, escaping newlines if necessary within the JSON string.
             *   `explanation`: A brief explanation of *why* the change is beneficial (e.g., "Reduces loops, improves set-based processing", "Minimizes I/O by combining DML operations", "Speeds up lookups on the temp table").
-        5.  Provide a brief overall summary containing:
-            *   `original_performance_issues`: Key performance problems identified.
-            *   `optimization_impact`: Expected overall impact (e.g., "Significant performance improvement expected", "Moderate reduction in execution time").
-            *   `implementation_difficulty`: Estimated effort (e.g., "Low", "Medium", "High").
+        5.  Provide a brief overall summary in the "summary" object containing:
+            *   `original_performance_issues`: Key performance problems identified (string).
+            *   `optimization_impact`: Expected overall impact, e.g., "Significant performance improvement expected", "Moderate reduction in execution time" (string).
+            *   `implementation_difficulty`: Estimated effort, e.g., "Low", "Medium", "High" (string).
 
         **Output Format (Strict JSON):**
-        Structure your response as a single, valid JSON object adhering precisely to this schema. Do NOT include any text before or after the JSON object (like ```json markdown).
+        Your entire response MUST be a single, valid JSON object adhering precisely to this schema. Do NOT include any text, explanations, apologies, or markdown formatting (like ```json) before or after the JSON object.
 
         ```json
         {{
@@ -280,8 +283,8 @@ def analyze_stored_procedure(file_content):
             {{
               "type": "string",
               "line_number": "string",
-              "existing_logic": "string (full SQL code snippet)",
-              "optimized_logic": "string (full SQL code snippet)",
+              "existing_logic": "string (full SQL code snippet as a single JSON string)",
+              "optimized_logic": "string (full SQL code snippet as a single JSON string)",
               "explanation": "string"
             }}
           ],
@@ -300,7 +303,8 @@ def analyze_stored_procedure(file_content):
                 {"role": "system", "content": "You are an expert SQL database optimizer. Your response MUST be a single, valid JSON object matching the requested schema, with no surrounding text or markdown."},
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.2, # Slightly lower temperature for more deterministic output
+            temperature=0.2, # Lower temperature for more deterministic JSON output
+            max_tokens=4000, # Increased max tokens for potentially long code snippets
             response_format={"type": "json_object"} # Explicitly request JSON response
         )
 
@@ -312,15 +316,30 @@ def analyze_stored_procedure(file_content):
 
         # Attempt to parse the JSON
         try:
-            # The response should already be clean JSON due to response_format and prompt instructions
             analysis_data = json.loads(analysis_result_str)
             # Basic validation (check if required keys exist)
-            if not all(k in analysis_data for k in ["procedure_name", "scope", "optimizations", "summary"]):
-                 st.warning("Warning: The analysis response might be missing some expected top-level keys.")
+            required_keys = ["procedure_name", "scope", "optimizations", "summary"]
+            if not all(k in analysis_data for k in required_keys):
+                 st.warning("Warning: The analysis response might be missing some expected top-level keys (procedure_name, scope, optimizations, summary).")
             if "optimizations" in analysis_data and isinstance(analysis_data["optimizations"], list):
+                opt_keys = ["type", "line_number", "existing_logic", "optimized_logic", "explanation"]
                 for i, opt in enumerate(analysis_data["optimizations"]):
-                     if not all(k in opt for k in ["type", "existing_logic", "optimized_logic", "explanation"]):
-                          st.warning(f"Warning: Optimization step {i+1} might be missing required keys.")
+                     if not all(k in opt for k in opt_keys):
+                          missing = [k for k in opt_keys if k not in opt]
+                          st.warning(f"Warning: Optimization step {i+1} might be missing required keys: {', '.join(missing)}")
+            elif "optimizations" not in analysis_data:
+                 # If optimizations key is missing, add an empty list for downstream safety
+                 analysis_data["optimizations"] = []
+
+
+            # Ensure summary exists, even if empty
+            if "summary" not in analysis_data:
+                 analysis_data["summary"] = {
+                      "original_performance_issues": "N/A",
+                      "optimization_impact": "N/A",
+                      "implementation_difficulty": "N/A"
+                 }
+
 
             return analysis_data
 
@@ -363,12 +382,46 @@ st.markdown("---")
 
 col1, col2 = st.columns([1, 1]) # Create two columns for layout
 
+# ========================= COLUMN 1: INPUT =========================
 with col1:
     st.subheader("1. Provide SQL Code")
-    # File upload component
-    uploaded_file = st.file_uploader("Upload SQL Stored Procedure File", type=["sql"], label_visibility="collapsed")
 
-    # Sample SQL button
+    # --- File Upload Handling (using multi-stage approach) ---
+    # Phase 1: Detect upload, store object, mark as seen, and trigger rerun
+    uploaded_file_obj = st.file_uploader("Upload SQL Stored Procedure File", type=["sql"], label_visibility="collapsed", key="sql_uploader")
+
+    if uploaded_file_obj is not None and uploaded_file_obj != st.session_state.get('processed_uploaded_file_obj'):
+        # Store the new file object to be processed on the next run
+        st.session_state['newly_uploaded_file_obj'] = uploaded_file_obj
+        # Mark this specific file object as "seen" to prevent re-processing if the user interacts elsewhere
+        st.session_state['processed_uploaded_file_obj'] = uploaded_file_obj
+        # Clear sample state if a file is uploaded
+        if 'sample_sql_loaded' in st.session_state:
+            del st.session_state['sample_sql_loaded']
+        st.rerun() # Trigger immediate rerun to handle the uploaded file
+
+    # Phase 2: Process the stored file object on the script run *after* upload detection
+    if 'newly_uploaded_file_obj' in st.session_state and st.session_state['newly_uploaded_file_obj'] is not None:
+        uploaded_file_to_process = st.session_state['newly_uploaded_file_obj']
+        try:
+            # Decode and update the session state bound to the text area
+            sql_content_from_file = uploaded_file_to_process.getvalue().decode("utf-8")
+            st.session_state['sql_input'] = sql_content_from_file
+            st.session_state['file_name'] = os.path.splitext(uploaded_file_to_process.name)[0]
+            # Important: Clear the trigger variable *after* successful processing
+            st.session_state['newly_uploaded_file_obj'] = None
+            # Provide feedback (optional)
+            # st.success(f"Loaded content from: {uploaded_file_to_process.name}")
+        except UnicodeDecodeError:
+             st.error(f"Error decoding file '{uploaded_file_to_process.name}'. Please ensure it is UTF-8 encoded.")
+             st.session_state['newly_uploaded_file_obj'] = None # Clear trigger
+        except Exception as e:
+            st.error(f"Error reading uploaded file: {e}")
+            # Important: Clear the trigger variable even on error
+            st.session_state['newly_uploaded_file_obj'] = None
+        # No rerun needed here, the text_area below will pick up the updated 'sql_input' state
+
+    # --- Sample SQL Button ---
     if st.button("Load Sample SQL"):
         sample_sql = """
 CREATE PROCEDURE usp_GetCustomerOrders_Inefficient
@@ -443,76 +496,98 @@ BEGIN
 END;
 GO
         """
+        # Directly update state - safe within button callback context
         st.session_state['sql_input'] = sample_sql
-        st.session_state['file_name'] = "sample_procedure.sql" # Store a dummy filename
+        st.session_state['file_name'] = "sample_procedure"
+        st.session_state['sample_sql_loaded'] = True # Flag that sample is loaded
+        # Clear file upload tracking state if sample is loaded
+        st.session_state['processed_uploaded_file_obj'] = None
+        st.session_state['newly_uploaded_file_obj'] = None
         st.success("Sample SQL loaded!")
-        # Clear uploaded file state if sample is loaded
-        if 'uploaded_file' in st.session_state:
-             del st.session_state['uploaded_file']
+        st.rerun() # Rerun to ensure UI consistency
 
-    # Text area for direct input / displaying loaded code
-    sql_input = st.text_area("Or paste SQL code here:", height=300, key="sql_input")
+    # --- Text Area ---
+    # Initialize 'sql_input' in session_state if it doesn't exist
+    if 'sql_input' not in st.session_state:
+        st.session_state['sql_input'] = ""
 
-    # Determine SQL content source
-    sql_content = None
-    file_name = "analysis_report" # Default filename base
-    if uploaded_file:
-        # Use uploaded file content preferentially if available
-        if uploaded_file != st.session_state.get('uploaded_file'): # Detect new upload
-             sql_content = uploaded_file.getvalue().decode("utf-8")
-             st.session_state['sql_input'] = sql_content # Update text area
-             st.session_state['file_name'] = os.path.splitext(uploaded_file.name)[0]
-             st.session_state['uploaded_file'] = uploaded_file # Store file state
-             st.rerun() # Rerun to update UI smoothly
-        else:
-             sql_content = st.session_state['sql_input'] # Use existing content if file hasn't changed
-             file_name = st.session_state.get('file_name', 'analysis_report')
+    # The text area's value is now primarily controlled by session_state['sql_input']
+    # which is updated either by file processing (Phase 2) or the sample button.
+    sql_input_from_textarea = st.text_area("Or paste SQL code here:", height=300, key="sql_input")
 
-    elif sql_input:
-        # Use text area content if no file uploaded or sample loaded recently
-        sql_content = sql_input
-        file_name = st.session_state.get('file_name', 'pasted_procedure')
-        # Clear sample state if text area is manually edited
-        if 'file_name' in st.session_state and st.session_state['file_name'] == "sample_procedure.sql":
-             if sql_content != st.session_state.get('sample_sql'):
-                   st.session_state['file_name'] = 'pasted_procedure'
-                   file_name = 'pasted_procedure'
+    # --- Determine final content and filename for analysis ---
+    # The text area state IS the primary source now.
+    sql_content = st.session_state.get('sql_input', '')
+
+    # Determine the filename based on the source
+    if st.session_state.get('sample_sql_loaded'):
+        file_name = "sample_procedure"
+    elif st.session_state.get('processed_uploaded_file_obj') and st.session_state.get('file_name'):
+        # If an upload was processed, keep its name even if text area is edited
+        file_name = st.session_state.get('file_name')
+    elif sql_content:
+        # If content exists (pasted/edited) and no upload/sample context, use default
+        file_name = "pasted_procedure"
+    else:
+        # Default if everything is empty
+        file_name = "analysis_report"
+
+    # Store the determined filename back to state for consistent use
+    st.session_state['current_file_name_base'] = file_name
 
 
+# ========================= COLUMN 2: ANALYSIS & DOWNLOAD =========================
 with col2:
     st.subheader("2. Analyze and Download")
-    analyze_button = st.button("Analyze SQL Procedure", type="primary", disabled=not sql_content)
+    # Button is enabled only if there is content in the text area state
+    analyze_button = st.button(
+        "Analyze SQL Procedure",
+        type="primary",
+        disabled=not st.session_state.get('sql_input', '').strip() # Check if sql_input state is non-empty
+    )
 
+    # Store analysis results in session state to persist across interactions
     if analyze_button:
-        # Run analysis
-        with st.spinner("🤖 Analyzing stored procedure... This may take a minute."):
-            st.session_state.analysis = analyze_stored_procedure(sql_content)
+        # Run analysis using the content currently in session state
+        current_sql_content = st.session_state.get('sql_input', '')
+        if current_sql_content.strip():
+             with st.spinner("🤖 Analyzing stored procedure... This may take a minute."):
+                st.session_state.analysis = analyze_stored_procedure(current_sql_content)
+        else:
+             st.warning("Cannot analyze empty SQL content.")
+             # Clear previous analysis if input is now empty
+             if 'analysis' in st.session_state:
+                  del st.session_state['analysis']
 
-    # Display results if analysis is complete
+
+    # Display results if analysis is available in session state
     if 'analysis' in st.session_state and st.session_state.analysis:
         analysis = st.session_state.analysis
         st.success("Analysis Complete!")
 
-        # Display the procedure name and scope
+        # Display procedure name and summary
         st.markdown(f"#### 🏷️ Procedure Name: `{analysis.get('procedure_name', 'N/A')}`")
         with st.expander("View Scope & Summary", expanded=False):
              st.markdown("**Scope:**")
              st.write(analysis.get('scope', 'N/A'))
              st.markdown("**Analysis Summary:**")
-             summary = analysis.get('summary', {})
+             summary = analysis.get('summary', {}) # Default to empty dict
              st.write(f"- **Identified Issues:** {summary.get('original_performance_issues', 'N/A')}")
              st.write(f"- **Expected Impact:** {summary.get('optimization_impact', 'N/A')}")
              st.write(f"- **Implementation Difficulty:** {summary.get('implementation_difficulty', 'N/A')}")
 
         # Display optimization steps
         st.markdown("#### ✨ Optimization Suggestions:")
-        optimizations = analysis.get("optimizations", [])
+        optimizations = analysis.get("optimizations", []) # Default to empty list
 
         if not optimizations:
-             st.info("✅ No specific optimization suggestions were found or generated.")
+             st.info("✅ No specific optimization suggestions were provided in the analysis.")
         else:
             for i, opt in enumerate(optimizations, 1):
-                with st.expander(f"Step {i}: {opt.get('type', 'N/A')} (Line: {opt.get('line_number', 'N/A')})", expanded=(i==1)): # Expand first step by default
+                opt_type = opt.get('type', 'N/A')
+                opt_line = opt.get('line_number', 'N/A')
+                expander_title = f"Step {i}: {opt_type} (Line: {opt_line})"
+                with st.expander(expander_title, expanded=(i==1)): # Expand first step
                     col_exist, col_optim = st.columns(2)
                     with col_exist:
                         st.markdown("**Existing Logic:**")
@@ -524,78 +599,91 @@ with col2:
                     st.markdown("**Explanation:**")
                     st.caption(f"> {opt.get('explanation', 'N/A')}")
 
+        # --- Download Section ---
+        st.markdown("---")
+        st.subheader("📥 Download Report")
 
-            # Download Button Section
-            st.markdown("---")
-            st.subheader("📥 Download Report")
+        # Use the filename base determined in col1
+        report_filename_base = st.session_state.get('current_file_name_base', 'sql_analysis')
 
-            # Create Word document in memory
+        # Generate Word doc bytes
+        docx_bytes = None
+        try:
             with st.spinner("Generating Word document..."):
                 docx_bytes = create_word_document(analysis)
+        except Exception as e:
+            st.error(f"Failed to generate Word document bytes: {e}") # Log error
 
-            if docx_bytes:
-                report_filename_base = file_name if file_name != 'pasted_procedure' else analysis.get('procedure_name', 'sql_analysis').replace(' ', '_')
-                st.download_button(
-                    label="⬇️ Download as Word (.docx)",
-                    data=docx_bytes,
-                    file_name=f"{report_filename_base}_analysis.docx",
-                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    key='docx-download'
-                )
+
+        if docx_bytes:
+            st.download_button(
+                label="⬇️ Download as Word (.docx)",
+                data=docx_bytes,
+                file_name=f"{report_filename_base}_analysis.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                key='docx-download'
+            )
+        else:
+             st.warning("Word document could not be generated.")
+
+        # --- Markdown Download ---
+        try:
+            # Create summary DataFrame for Markdown export
+            summary_data_md = []
+            for opt in analysis.get("optimizations", []):
+                summary_data_md.append({
+                    "Type": opt.get("type", "N/A"),
+                    "Line": opt.get("line_number", "N/A"),
+                    "Original Code": f"```sql\n{opt.get('existing_logic', '')}\n```", # Format as code block
+                    "Optimized Code": f"```sql\n{opt.get('optimized_logic', '')}\n```", # Format as code block
+                    "Explanation": opt.get("explanation", "")
+                })
+            summary_df_md = pd.DataFrame(summary_data_md)
+
+            # Generate Markdown content
+            report_md = f"# SQL Stored Procedure Analysis Report\n\n"
+            report_md += f"## Procedure Name: `{analysis.get('procedure_name', 'N/A')}`\n\n"
+            report_md += f"## Scope:\n{analysis.get('scope', 'N/A')}\n\n"
+            report_md += f"## Analysis Summary:\n"
+            summary = analysis.get('summary', {})
+            report_md += f"- **Identified Issues:** {summary.get('original_performance_issues', 'N/A')}\n"
+            report_md += f"- **Expected Impact:** {summary.get('optimization_impact', 'N/A')}\n"
+            report_md += f"- **Implementation Difficulty:** {summary.get('implementation_difficulty', 'N/A')}\n\n"
+
+            report_md += "## Optimization Steps:\n"
+            optimizations_md = analysis.get("optimizations", [])
+            if not optimizations_md:
+                 report_md += "No specific optimization suggestions were provided.\n"
             else:
-                 st.error("Failed to generate Word document.")
-
-            # Option for Markdown download
-            try:
-                # Create summary DataFrame for Markdown export
-                summary_data_md = []
-                for opt in analysis.get("optimizations", []):
-                    summary_data_md.append({
-                        "Type": opt.get("type", "N/A"),
-                        "Line": opt.get("line_number", "N/A"),
-                        "Original Code": f"```sql\n{opt.get('existing_logic', '')}\n```", # Format as code block
-                        "Optimized Code": f"```sql\n{opt.get('optimized_logic', '')}\n```", # Format as code block
-                        "Explanation": opt.get("explanation", "")
-                    })
-                summary_df_md = pd.DataFrame(summary_data_md)
-
-                # Generate Markdown content
-                report_md = f"# SQL Stored Procedure Analysis Report\n\n"
-                report_md += f"## Procedure Name: `{analysis.get('procedure_name', 'N/A')}`\n\n"
-                report_md += f"## Scope:\n{analysis.get('scope', 'N/A')}\n\n"
-                report_md += f"## Analysis Summary:\n"
-                summary = analysis.get('summary', {})
-                report_md += f"- **Identified Issues:** {summary.get('original_performance_issues', 'N/A')}\n"
-                report_md += f"- **Expected Impact:** {summary.get('optimization_impact', 'N/A')}\n"
-                report_md += f"- **Implementation Difficulty:** {summary.get('implementation_difficulty', 'N/A')}\n\n"
-
-                report_md += "## Optimization Steps:\n"
-                for i, opt in enumerate(analysis.get("optimizations", []), 1):
-                    report_md += f"\n### Step {i}: {opt.get('type', 'N/A')} (Line: {opt.get('line_number', 'N/A')})\n\n"
+                for i, opt in enumerate(optimizations_md, 1):
+                    opt_type = opt.get('type', 'N/A')
+                    opt_line = opt.get('line_number', 'N/A')
+                    report_md += f"\n### Step {i}: {opt_type} (Line: {opt_line})\n\n"
                     report_md += f"**Existing Logic:**\n```sql\n{opt.get('existing_logic', 'N/A')}\n```\n\n"
                     report_md += f"**Optimized Logic:**\n```sql\n{opt.get('optimized_logic', 'N/A')}\n```\n\n"
                     report_md += f"**Explanation:**\n> {opt.get('explanation', 'N/A')}\n\n---\n"
 
+            if not summary_df_md.empty:
                 report_md += "\n## Summary Table:\n\n"
                 report_md += summary_df_md.to_markdown(index=False)
 
-                st.download_button(
-                    label="⬇️ Download as Markdown (.md)",
-                    data=report_md.encode('utf-8'), # Encode to bytes
-                    file_name=f"{report_filename_base}_analysis.md",
-                    mime="text/markdown",
-                    key='md-download'
-                )
-            except Exception as e:
-                 st.warning(f"Could not generate Markdown download: {e}")
+            st.download_button(
+                label="⬇️ Download as Markdown (.md)",
+                data=report_md.encode('utf-8'), # Encode to bytes
+                file_name=f"{report_filename_base}_analysis.md",
+                mime="text/markdown",
+                key='md-download'
+            )
+        except Exception as e:
+             st.warning(f"Could not generate Markdown download: {e}")
 
 
     elif analyze_button and 'analysis' in st.session_state and not st.session_state.analysis:
-        # Handle case where analysis button was clicked but analysis failed
-        st.error("Analysis could not be completed. Please check the error messages and potentially the API Error Details in the sidebar.")
+        # Handle case where analysis button was clicked but analysis failed or returned None
+        st.error("Analysis could not be completed or returned no results. Please check the SQL content and any error messages above or in the sidebar.")
 
-    elif not sql_content:
-         st.info("Upload a .sql file or paste SQL code in the text area on the left to enable analysis.")
+    elif not st.session_state.get('sql_input','').strip(): # If the text area state is empty
+         st.info("Upload a .sql file or paste/load SQL code in the text area on the left to enable analysis.")
 
 
 # --- Footer ---
