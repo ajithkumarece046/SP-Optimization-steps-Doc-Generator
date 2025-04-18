@@ -256,6 +256,7 @@ def analyze_stored_procedure(file_content):
         
         # Extract the JSON from the response
         analysis_result = response.choices[0].message.content
+        st.write(analysis_result)
         
         # Debug: Display raw response for troubleshooting
         st.sidebar.expander("Debug Raw Response", expanded=False).code(analysis_result)
