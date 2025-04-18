@@ -106,8 +106,8 @@ def create_word_document(analysis):
         table_data.append({
             "Type of Change": opt.get("type", "N/A"),
             "Line Number": opt.get("line_number", "N/A"), # Use .get for safety
-            "Original Code Snippet": opt.get("existing_logic", "")[:40] + "..." if len(opt.get("existing_logic", "")) > 40 else opt.get("existing_logic", ""),
-            "Optimized Code Snippet": opt.get("optimized_logic", "")[:40] + "..." if len(opt.get("optimized_logic", "")) > 40 else opt.get("optimized_logic", ""),
+            "Original Code Snippet": opt.get("existing_logic", ""),  # Remove truncation
+            "Optimized Code Snippet": opt.get("optimized_logic", ""),  # Remove truncation
             "Optimization Explanation": opt.get("explanation", "")
         })
 
@@ -286,42 +286,6 @@ def analyze_stored_procedure(file_content):
 st.title("SQL Stored Procedure Analyzer")
 st.write("Upload a SQL stored procedure file for AI-powered optimization analysis")
 
-# # Sidebar for configuration information
-# with st.sidebar:
-#     st.header("Configuration")
-#     st.info("This app uses Azure OpenAI configured through environment variables.")
-    
-#     # Add a configuration check section
-#     config_expander = st.expander("Check Configuration", expanded=False)
-#     with config_expander:
-#         # Load environment variables to check if they're set
-#         load_dotenv()
-        
-#         azure_openai_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")  
-#         azure_openai_key = os.getenv("AZURE_OPENAI_KEY")
-#         azure_api_version = os.getenv("API_VERSION")
-        
-#         # Display status of environment variables
-#         st.write("Environment Variables Status:")
-#         st.write(f"AZURE_OPENAI_ENDPOINT: {'✅ Set' if azure_openai_endpoint else '❌ Missing'}")
-#         st.write(f"AZURE_OPENAI_KEY: {'✅ Set' if azure_openai_key else '❌ Missing'}")
-#         st.write(f"API_VERSION: {'✅ Set' if azure_api_version else '❌ Missing'}")
-        
-#         if not all([azure_openai_endpoint, azure_openai_key, azure_api_version]):
-#             st.warning("Some required environment variables are missing. Please set them in your .env file.")
-            
-#             # Option to set variables manually for testing
-#             st.subheader("Temporary Setup (Session Only)")
-#             temp_endpoint = st.text_input("Azure OpenAI Endpoint", value=azure_openai_endpoint or "")
-#             temp_key = st.text_input("Azure OpenAI Key", value="", type="password")
-#             temp_api_version = st.text_input("API Version", value=azure_api_version or "2023-05-15")
-            
-#             if st.button("Apply Temporary Settings"):
-#                 os.environ["AZURE_OPENAI_ENDPOINT"] = temp_endpoint
-#                 os.environ["AZURE_OPENAI_KEY"] = temp_key
-#                 os.environ["API_VERSION"] = temp_api_version
-#                 st.success("Temporary settings applied for this session!")
-    
 st.markdown("---")
 st.markdown("""
     ### About This Tool
@@ -488,6 +452,9 @@ if sql_content:
                     text-align: left;
                     padding: 8px;
                     border: 1px solid #ddd;
+                    max-width: 300px;  /* Limit width but allow expansion */
+                    white-space: pre-wrap;  /* Preserve whitespace and wrap text */
+                    word-break: break-word;  /* Break words to prevent overflow */
                 }
                 .summary-table tr:nth-child(even) {
                     background-color: #f9f9f9;
@@ -526,22 +493,22 @@ if sql_content:
                 
                 for i, opt in enumerate(analysis["optimizations"], 1):
                     report_md += f"""
-### Step {i}: {opt['type']}
+                    ### Step {i}: {opt['type']}
 
-**Existing Logic:**
-```sql
-{opt['existing_logic']}
-```
+                    **Existing Logic:**
+                    ```sql
+                    {opt['existing_logic']}
+                    ```
 
-**Optimized Logic:**
-```sql
-{opt['optimized_logic']}
-```
+                    **Optimized Logic:**
+                    ```sql
+                    {opt['optimized_logic']}
+                    ```
 
-*{opt['explanation']}*
+                    *{opt['explanation']}*
 
----
-"""
+                ---
+                """
                 
                 report_md += "\n## Summary Table:\n\n"
                 report_md += summary_df.to_markdown(index=False)
@@ -598,14 +565,14 @@ else:
         example_data = [{
             "Type of Change": "Replace Multiple Updates",
             "Line Number": "Identified in multiple places",
-            "Original Code Snippet": "UPDATE col1 + UPDATE col2",
-            "Optimized Code Snippet": "UPDATE col1, col2",
+            "Original Code Snippet": "UPDATE table SET col1 = val WHERE condition;\nUPDATE table SET col2 = val WHERE condition;",
+            "Optimized Code Snippet": "UPDATE table \nSET col1 = val, \n    col2 = val \nWHERE condition;",
             "Optimization Explanation": "Reduces write operations and improves efficiency."
         }, {
             "Type of Change": "Index on Temp Tables",
             "Line Number": "Where temp tables are created",
-            "Original Code Snippet": "CREATE TABLE #temp",
-            "Optimized Code Snippet": "CREATE INDEX ON #temp",
+            "Original Code Snippet": "CREATE TABLE #temp (col1 INT, col2 VARCHAR(50))",
+            "Optimized Code Snippet": "CREATE TABLE #temp (col1 INT, col2 VARCHAR(50))\nCREATE INDEX ix_temp_col1 ON #temp(col1)",
             "Optimization Explanation": "Improves performance by speeding up lookups and joins."
         }]
         
@@ -629,6 +596,9 @@ else:
             text-align: left;
             padding: 8px;
             border: 1px solid #ddd;
+            max-width: 300px;
+            white-space: pre-wrap;
+            word-break: break-word;
         }
         .summary-table tr:nth-child(even) {
             background-color: #f9f9f9;
