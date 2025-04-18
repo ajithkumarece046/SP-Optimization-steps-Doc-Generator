@@ -215,8 +215,8 @@ def analyze_stored_procedure(file_content):
         For each optimization opportunity, provide:
         - Type of optimization
         - Line number or location in code
-        - Existing code snippet (as is)
-        - Optimized code snippet (your suggestion)
+        - Existing code snippet as complete line of code
+        - Optimized code snippet (your suggestion) with complete code
         - Brief explanation of the benefit
         
         Structure your response as valid JSON that matches this format exactly:
