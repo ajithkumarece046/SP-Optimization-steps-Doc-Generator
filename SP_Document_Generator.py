@@ -49,6 +49,7 @@ def create_word_document(analysis):
         # Existing Logic
         doc.add_heading('Existing Logic:', level=3)
         existing_code = doc.add_paragraph(opt["existing_logic"])
+        # existing_code.style = 'Code'  # <--- REMOVE THIS LINE
 
         # Format code paragraph
         existing_code_fmt = existing_code.paragraph_format
@@ -63,6 +64,7 @@ def create_word_document(analysis):
         # Optimized Logic
         doc.add_heading('Optimized Logic:', level=3)
         optimized_code = doc.add_paragraph(opt["optimized_logic"])
+        # optimized_code.style = 'Code' # <--- REMOVE THIS LINE
 
         # Format code paragraph
         optimized_code_fmt = optimized_code.paragraph_format
@@ -79,9 +81,21 @@ def create_word_document(analysis):
         explanation_text = explanation_para.add_run(opt["explanation"])
         explanation_text.italic = True
 
-        # Add separator paragraph
+        # Add separator paragraph (using a paragraph border might be better visually)
+        # Consider adding a paragraph border instead of underscores for a cleaner look
         separator = doc.add_paragraph()
+        # Example of adding a bottom border (uncomment if desired)
+        # p_border = OxmlElement('w:pBdr')
+        # bottom_border = OxmlElement('w:bottom')
+        # bottom_border.set(qn('w:val'), 'single')
+        # bottom_border.set(qn('w:sz'), '6') # size in 1/8ths of a point
+        # bottom_border.set(qn('w:space'), '1')
+        # bottom_border.set(qn('w:color'), 'auto')
+        # p_border.append(bottom_border)
+        # separator._p.get_or_add_pPr().append(p_border)
+        # Or keep the simple underscore line:
         separator.add_run('_' * 40)
+
 
     # Add summary table
     doc.add_heading('Summary:', level=1)
@@ -91,83 +105,65 @@ def create_word_document(analysis):
     for opt in analysis["optimizations"]:
         table_data.append({
             "Type of Change": opt.get("type", "N/A"),
-            "Line Number": opt.get("line_number", "N/A"), 
-            "Original Code Snippet": opt.get("existing_logic", ""),  # No truncation
-            "Optimized Code Snippet": opt.get("optimized_logic", ""),  # No truncation 
+            "Line Number": opt.get("line_number", "N/A"), # Use .get for safety
+            "Original Code Snippet": opt.get("existing_logic", "")[:40] + "..." if len(opt.get("existing_logic", "")) > 40 else opt.get("existing_logic", ""),
+            "Optimized Code Snippet": opt.get("optimized_logic", "")[:40] + "..." if len(opt.get("optimized_logic", "")) > 40 else opt.get("optimized_logic", ""),
             "Optimization Explanation": opt.get("explanation", "")
         })
 
     # Add table to document only if there's data
     if table_data:
-        # Create a table with appropriate dimensions
-        # Note: We're using a 3-column table instead of 5 to fit better on the page
-        # The code snippets will be placed under the headers
-        num_rows = len(table_data) * 2  # Each entry takes 2 rows (header + content)
-        table = doc.add_table(rows=num_rows, cols=3)
-        table.style = 'Table Grid'
-        
-        # Set main headers for the first row
+        num_rows = 1 + len(table_data)
+        num_cols = 5
+        table = doc.add_table(rows=num_rows, cols=num_cols)
+        table.style = 'Table Grid' # Ensure 'Table Grid' style exists or use a known default
+
+        # Set header row
         header_cells = table.rows[0].cells
-        header_cells[0].text = "Type of Change"
-        header_cells[1].text = "Line Number"
-        header_cells[2].text = "Optimization Explanation"
-        
-        # Format the header row
-        for cell in header_cells:
-            for paragraph in cell.paragraphs:
-                for run in paragraph.runs:
-                    run.bold = True
-                paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        
-        # Fill in the table data - using multiple rows for better readability
-        current_row = 1
-        for item in table_data:
-            # Set the basic info in the first row
-            row_cells = table.rows[current_row].cells
+        headers = ['Type of Change', 'Line Number', 'Original Code Snippet', 'Optimized Code Snippet', 'Optimization Explanation']
+        for i, header_text in enumerate(headers):
+            cell = header_cells[i]
+            # Clear existing content (sometimes needed)
+            cell.text = ''
+            # Add text and format
+            p = cell.paragraphs[0]
+            run = p.add_run(header_text)
+            run.bold = True
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER # Center align header text
+
+        # Add data rows
+        for i, item in enumerate(table_data):
+            row_cells = table.rows[i+1].cells
             row_cells[0].text = item['Type of Change']
             row_cells[1].text = item['Line Number']
-            row_cells[2].text = item['Optimization Explanation']
-            
-            # Move to next row and add the code sections
-            current_row += 1
-            if current_row < num_rows:  # Safety check
-                # Get the next row and merge all cells
-                code_row = table.rows[current_row]
-                code_cell = code_row.cells[0]
-                code_cell.merge(code_row.cells[1])
-                code_cell.merge(code_row.cells[0])  # Merge with the already merged cell
-                
-                # Add original and optimized code
-                p1 = code_cell.add_paragraph("Original Code:")
-                p1.runs[0].bold = True
-                p2 = code_cell.add_paragraph(item['Original Code Snippet'])
-                # Format as code
-                for run in p2.runs:
-                    run.font.name = 'Courier New'
-                    run.font.size = Pt(9)
-                
-                p3 = code_cell.add_paragraph("Optimized Code:")
-                p3.runs[0].bold = True
-                p4 = code_cell.add_paragraph(item['Optimized Code Snippet'])
-                # Format as code
-                for run in p4.runs:
-                    run.font.name = 'Courier New'
-                    run.font.size = Pt(9)
-                
-                current_row += 1
-        
+            row_cells[2].text = item['Original Code Snippet']
+            row_cells[3].text = item['Optimized Code Snippet']
+            row_cells[4].text = item['Optimization Explanation']
+
+        # Set table column widths (apply carefully)
+        try:
+            table.columns[0].width = Inches(1.2)
+            table.columns[1].width = Inches(0.8) # Reduced width for line number
+            table.columns[2].width = Inches(1.5)
+            table.columns[3].width = Inches(1.5)
+            table.columns[4].width = Inches(2.0) # Increased width for explanation
+        except IndexError:
+             st.warning("Could not set all table column widths.")
+
+
         # Apply alternate row shading
-        for i in range(0, num_rows, 2):  # Apply to every other data row
-            if i > 0:  # Skip header row
-                for cell in table.rows[i].cells:
+        for i, row in enumerate(table.rows):
+            if i > 0 and i % 2 == 0:  # Even data rows (index 2, 4, ...) get shading
+                for cell in row.cells:
                     tcPr = cell._tc.get_or_add_tcPr()
                     shading_elm = OxmlElement('w:shd')
-                    shading_elm.set(qn('w:fill'), "F2F2F2")  # Light gray
-                    shading_elm.set(qn('w:val'), 'clear')
+                    shading_elm.set(qn('w:fill'), "F2F2F2") # Light gray color
+                    shading_elm.set(qn('w:val'), 'clear') # Ensure fill type is set
                     shading_elm.set(qn('w:color'), 'auto')
                     tcPr.append(shading_elm)
     else:
         doc.add_paragraph("No optimization suggestions were generated.")
+
 
     # Save the document to a BytesIO object
     doc_io = BytesIO()
@@ -175,6 +171,8 @@ def create_word_document(analysis):
     doc_io.seek(0)
 
     return doc_io
+
+# --- Keep the rest of your Streamlit code as is ---
 
 # Function to analyze stored procedure using Azure OpenAI
 def analyze_stored_procedure(file_content):
@@ -258,6 +256,7 @@ def analyze_stored_procedure(file_content):
         
         # Extract the JSON from the response
         analysis_result = response.choices[0].message.content
+        st.write(analysis_result)
         
         # Debug: Display raw response for troubleshooting
         st.sidebar.expander("Debug Raw Response", expanded=False).code(analysis_result)
@@ -287,6 +286,42 @@ def analyze_stored_procedure(file_content):
 st.title("SQL Stored Procedure Analyzer")
 st.write("Upload a SQL stored procedure file for AI-powered optimization analysis")
 
+# # Sidebar for configuration information
+# with st.sidebar:
+#     st.header("Configuration")
+#     st.info("This app uses Azure OpenAI configured through environment variables.")
+    
+#     # Add a configuration check section
+#     config_expander = st.expander("Check Configuration", expanded=False)
+#     with config_expander:
+#         # Load environment variables to check if they're set
+#         load_dotenv()
+        
+#         azure_openai_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")  
+#         azure_openai_key = os.getenv("AZURE_OPENAI_KEY")
+#         azure_api_version = os.getenv("API_VERSION")
+        
+#         # Display status of environment variables
+#         st.write("Environment Variables Status:")
+#         st.write(f"AZURE_OPENAI_ENDPOINT: {'✅ Set' if azure_openai_endpoint else '❌ Missing'}")
+#         st.write(f"AZURE_OPENAI_KEY: {'✅ Set' if azure_openai_key else '❌ Missing'}")
+#         st.write(f"API_VERSION: {'✅ Set' if azure_api_version else '❌ Missing'}")
+        
+#         if not all([azure_openai_endpoint, azure_openai_key, azure_api_version]):
+#             st.warning("Some required environment variables are missing. Please set them in your .env file.")
+            
+#             # Option to set variables manually for testing
+#             st.subheader("Temporary Setup (Session Only)")
+#             temp_endpoint = st.text_input("Azure OpenAI Endpoint", value=azure_openai_endpoint or "")
+#             temp_key = st.text_input("Azure OpenAI Key", value="", type="password")
+#             temp_api_version = st.text_input("API Version", value=azure_api_version or "2023-05-15")
+            
+#             if st.button("Apply Temporary Settings"):
+#                 os.environ["AZURE_OPENAI_ENDPOINT"] = temp_endpoint
+#                 os.environ["AZURE_OPENAI_KEY"] = temp_key
+#                 os.environ["API_VERSION"] = temp_api_version
+#                 st.success("Temporary settings applied for this session!")
+    
 st.markdown("---")
 st.markdown("""
     ### About This Tool
@@ -453,9 +488,6 @@ if sql_content:
                     text-align: left;
                     padding: 8px;
                     border: 1px solid #ddd;
-                    max-width: 300px;  /* Limit width but allow expansion */
-                    white-space: pre-wrap;  /* Preserve whitespace and wrap text */
-                    word-break: break-word;  /* Break words to prevent overflow */
                 }
                 .summary-table tr:nth-child(even) {
                     background-color: #f9f9f9;
@@ -566,14 +598,14 @@ else:
         example_data = [{
             "Type of Change": "Replace Multiple Updates",
             "Line Number": "Identified in multiple places",
-            "Original Code Snippet": "UPDATE table SET col1 = val WHERE condition;\nUPDATE table SET col2 = val WHERE condition;",
-            "Optimized Code Snippet": "UPDATE table \nSET col1 = val, \n    col2 = val \nWHERE condition;",
+            "Original Code Snippet": "UPDATE col1 + UPDATE col2",
+            "Optimized Code Snippet": "UPDATE col1, col2",
             "Optimization Explanation": "Reduces write operations and improves efficiency."
         }, {
             "Type of Change": "Index on Temp Tables",
             "Line Number": "Where temp tables are created",
-            "Original Code Snippet": "CREATE TABLE #temp (col1 INT, col2 VARCHAR(50))",
-            "Optimized Code Snippet": "CREATE TABLE #temp (col1 INT, col2 VARCHAR(50))\nCREATE INDEX ix_temp_col1 ON #temp(col1)",
+            "Original Code Snippet": "CREATE TABLE #temp",
+            "Optimized Code Snippet": "CREATE INDEX ON #temp",
             "Optimization Explanation": "Improves performance by speeding up lookups and joins."
         }]
         
@@ -597,9 +629,6 @@ else:
             text-align: left;
             padding: 8px;
             border: 1px solid #ddd;
-            max-width: 300px;
-            white-space: pre-wrap;
-            word-break: break-word;
         }
         .summary-table tr:nth-child(even) {
             background-color: #f9f9f9;
